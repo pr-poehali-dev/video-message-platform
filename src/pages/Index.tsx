@@ -11,7 +11,7 @@ const Index = () => {
   const [showSuccessPage, setShowSuccessPage] = useState(false);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
   const [cameraStarted, setCameraStarted] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -83,112 +83,49 @@ const Index = () => {
     }
   };
 
-  const sendToTelegram = async () => {
+  const shareVideo = async () => {
     if (videoBlob) {
       try {
-        // Проверяем, есть ли Telegram Web App API
-        if (window.Telegram && window.Telegram.WebApp) {
-          // Используем правильный способ отправки через Telegram
-          sendVideoViaTelegram();
-        } else {
-          // Fallback: используем Web Share API если доступен
-          if (navigator.share && navigator.canShare) {
-            const file = new File([videoBlob], 'recorded_video.webm', { type: 'video/webm' });
-            
-            if (navigator.canShare({ files: [file] })) {
-              await navigator.share({
-                files: [file],
-                title: 'Видео запись',
-                text: 'Посмотрите мое видео'
-              });
-              setShowSuccessPage(true);
-            } else {
-              // Если Web Share API не поддерживает файлы, скачиваем видео
-              downloadVideo();
-            }
+        // Используем Web Share API если доступен
+        if (navigator.share && navigator.canShare) {
+          const file = new File([videoBlob], 'video_recording.webm', { type: 'video/webm' });
+          
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Видео запись',
+              text: 'Мое видео'
+            });
+            setShowSuccessPage(true);
           } else {
-            // Если Web Share API недоступен, скачиваем видео
+            // Если Web Share API не поддерживает файлы, скачиваем видео
             downloadVideo();
           }
+        } else {
+          // Если Web Share API недоступен, скачиваем видео
+          downloadVideo();
         }
       } catch (error) {
-        console.error('Ошибка при отправке видео:', error);
-        // В случае ошибки предлагаем скачать видео
+        console.error('Ошибка при шеринге видео:', error);
+        // В случае ошибки скачиваем видео
         downloadVideo();
       }
     }
   };
 
-  const sendVideoViaTelegram = async () => {
-    if (!videoBlob) return;
 
-    try {
-      setIsUploading(true);
-
-      // ВАЖНО: Telegram Web App не может напрямую отправлять файлы
-      // Нужно использовать backend API для загрузки и отправки через бота
-      
-      // Создаем FormData с видео
-      const formData = new FormData();
-      formData.append('video', videoBlob, 'recorded_video.webm');
-      
-      // Получаем ID пользователя из Telegram Web App
-      const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-      if (userId) {
-        formData.append('user_id', userId.toString());
-      }
-      
-      // Отправляем на наш backend API (здесь имитация)
-      // В реальном проекте это будет запрос к вашему серверу
-      try {
-        const response = await fetch('/api/send-video-to-telegram', {
-          method: 'POST',
-          body: formData,
-          headers: {
-            // Добавляем Telegram init data для аутентификации
-            'X-Telegram-Init-Data': window.Telegram?.WebApp?.initData || ''
-          }
-        });
-        
-        if (response.ok) {
-          setIsUploading(false);
-          setShowSuccessPage(true);
-        } else {
-          throw new Error('API endpoint not found');
-        }
-      } catch (fetchError) {
-        // Fallback: имитируем успешную отправку для демонстрации
-        console.log('API endpoint не найден, имитируем отправку');
-        
-        // Показываем пользователю процесс отправки
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        setIsUploading(false);
-        setShowSuccessPage(true);
-      }
-    } catch (error) {
-      console.error('Ошибка отправки через Telegram:', error);
-      setIsUploading(false);
-      
-      // Fallback: предлагаем скачать файл
-      if (confirm('Не удалось отправить через Telegram. Скачать видео для ручной отправки?')) {
-        downloadVideo();
-      }
-    }
-  };
 
   const downloadVideo = () => {
     if (videoBlob) {
       const url = URL.createObjectURL(videoBlob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'recorded_video.webm';
+      a.download = 'video_recording.webm';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      alert('Видео скачано. Теперь вы можете отправить его в Telegram вручную.');
       setShowSuccessPage(true);
     }
   };
@@ -211,7 +148,7 @@ const Index = () => {
               <Icon name="Check" size={32} className="text-primary-foreground" />
             </div>
             <h2 className="text-2xl font-medium text-foreground mb-2">
-              Ваш контакт успешно отправлен
+              Видео успешно обработано
             </h2>
           </div>
           
@@ -219,7 +156,7 @@ const Index = () => {
             onClick={resetToRecording}
             className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
-            Создать новый лид
+            Записать новое видео
           </Button>
         </Card>
       </div>
@@ -302,22 +239,12 @@ const Index = () => {
               ) : (
                 <div className="space-y-3">
                   <Button
-                    onClick={sendToTelegram}
-                    disabled={isUploading}
+                    onClick={shareVideo}
                     size="lg"
-                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
-                    {isUploading ? (
-                      <>
-                        <Icon name="Loader2" className="mr-2 animate-spin" size={20} />
-                        Отправляем видео...
-                      </>
-                    ) : (
-                      <>
-                        <Icon name="Send" className="mr-2" size={20} />
-                        Отправить в Telegram
-                      </>
-                    )}
+                    <Icon name="Share" className="mr-2" size={20} />
+                    Решение
                   </Button>
                   
                   <Button
@@ -365,25 +292,6 @@ const Index = () => {
   );
 };
 
-// Расширяем интерфейс Window для Telegram WebApp API
-declare global {
-  interface Window {
-    Telegram: {
-      WebApp: {
-        showPopup: (params: any, callback: (buttonId: string) => void) => void;
-        sendData: (data: string) => void;
-        openTelegramLink: (url: string) => void;
-        initData: string;
-        initDataUnsafe: {
-          user?: {
-            id: number;
-            first_name: string;
-            username?: string;
-          };
-        };
-      };
-    };
-  }
-}
+
 
 export default Index;
