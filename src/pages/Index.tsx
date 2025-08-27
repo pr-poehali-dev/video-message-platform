@@ -82,34 +82,67 @@ const Index = () => {
     }
   };
 
-  const sendToTelegram = () => {
+  const sendToTelegram = async () => {
     if (videoBlob) {
-      // Проверяем, есть ли Telegram Web App API
-      if (window.Telegram && window.Telegram.WebApp) {
-        // Показываем диалог выбора получателя
-        window.Telegram.WebApp.showPopup({
-          title: 'Отправка видео',
-          message: 'Выберите получателя для отправки видео',
-          buttons: [
-            {id: 'send', type: 'default', text: 'Отправить'},
-            {id: 'cancel', type: 'cancel', text: 'Отмена'}
-          ]
-        }, (buttonId: string) => {
-          if (buttonId === 'send') {
-            // Имитируем отправку
-            setShowSuccessPage(true);
-          }
-        });
-      } else {
-        // Fallback: открываем диалог выбора получателя через стандартный API
-        const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=Посмотрите мое видео`;
-        
-        // Открываем окно выбора получателя
-        if (confirm('Открыть Telegram для выбора получателя?')) {
-          window.open(telegramUrl, '_blank');
+      try {
+        // Проверяем, есть ли Telegram Web App API
+        if (window.Telegram && window.Telegram.WebApp) {
+          // Конвертируем Blob в Base64 для отправки через Telegram Web App
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64Data = reader.result as string;
+            window.Telegram.WebApp.sendData(JSON.stringify({
+              type: 'video',
+              data: base64Data,
+              filename: 'recorded_video.webm',
+              caption: 'Посмотрите мое видео'
+            }));
+          };
+          reader.readAsDataURL(videoBlob);
+          
           setShowSuccessPage(true);
+        } else {
+          // Fallback: используем Web Share API если доступен
+          if (navigator.share && navigator.canShare) {
+            const file = new File([videoBlob], 'recorded_video.webm', { type: 'video/webm' });
+            
+            if (navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                files: [file],
+                title: 'Видео запись',
+                text: 'Посмотрите мое видео'
+              });
+              setShowSuccessPage(true);
+            } else {
+              // Если Web Share API не поддерживает файлы, скачиваем видео
+              downloadVideo();
+            }
+          } else {
+            // Если Web Share API недоступен, скачиваем видео
+            downloadVideo();
+          }
         }
+      } catch (error) {
+        console.error('Ошибка при отправке видео:', error);
+        // В случае ошибки предлагаем скачать видео
+        downloadVideo();
       }
+    }
+  };
+
+  const downloadVideo = () => {
+    if (videoBlob) {
+      const url = URL.createObjectURL(videoBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'recorded_video.webm';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      alert('Видео скачано. Теперь вы можете отправить его в Telegram вручную.');
+      setShowSuccessPage(true);
     }
   };
 
@@ -281,6 +314,7 @@ declare global {
     Telegram: {
       WebApp: {
         showPopup: (params: any, callback: (buttonId: string) => void) => void;
+        sendData: (data: string) => void;
       };
     };
   }
