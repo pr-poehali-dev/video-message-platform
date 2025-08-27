@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -10,6 +10,7 @@ const Index = () => {
   const [showImageModal, setShowImageModal] = useState(false);
   const [showSuccessPage, setShowSuccessPage] = useState(false);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
+  const [cameraStarted, setCameraStarted] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -28,11 +29,13 @@ const Index = () => {
       });
       
       streamRef.current = stream;
+      setCameraStarted(true);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
     } catch (error) {
       console.error('Ошибка доступа к камере:', error);
+      alert('Не удалось получить доступ к камере');
     }
   };
 
@@ -40,11 +43,12 @@ const Index = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
+      setCameraStarted(false);
     }
   };
 
   const startRecording = async () => {
-    if (!streamRef.current) {
+    if (!cameraStarted) {
       await startCamera();
     }
 
@@ -80,8 +84,32 @@ const Index = () => {
 
   const sendToTelegram = () => {
     if (videoBlob) {
-      // Имитация отправки в Telegram
-      setShowSuccessPage(true);
+      // Проверяем, есть ли Telegram Web App API
+      if (window.Telegram && window.Telegram.WebApp) {
+        // Показываем диалог выбора получателя
+        window.Telegram.WebApp.showPopup({
+          title: 'Отправка видео',
+          message: 'Выберите получателя для отправки видео',
+          buttons: [
+            {id: 'send', type: 'default', text: 'Отправить'},
+            {id: 'cancel', type: 'cancel', text: 'Отмена'}
+          ]
+        }, (buttonId: string) => {
+          if (buttonId === 'send') {
+            // Имитируем отправку
+            setShowSuccessPage(true);
+          }
+        });
+      } else {
+        // Fallback: открываем диалог выбора получателя через стандартный API
+        const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=Посмотрите мое видео`;
+        
+        // Открываем окно выбора получателя
+        if (confirm('Открыть Telegram для выбора получателя?')) {
+          window.open(telegramUrl, '_blank');
+          setShowSuccessPage(true);
+        }
+      }
     }
   };
 
@@ -92,32 +120,24 @@ const Index = () => {
     chunksRef.current = [];
   };
 
-  useEffect(() => {
-    startCamera();
-    return () => {
-      stopCamera();
-      if (recordedVideoUrl) {
-        URL.revokeObjectURL(recordedVideoUrl);
-      }
-    };
-  }, []);
+
 
   if (showSuccessPage) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-4">
-        <Card className="bg-card border-border p-8 text-center max-w-md w-full">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="bg-card border-border p-8 text-center max-w-md w-full minimal-shadow">
           <div className="mb-6">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary flex items-center justify-center neon-glow text-primary">
-              <Icon name="Check" size={32} />
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary flex items-center justify-center">
+              <Icon name="Check" size={32} className="text-primary-foreground" />
             </div>
-            <h2 className="text-2xl font-bold text-foreground mb-2 neon-text text-primary">
+            <h2 className="text-2xl font-medium text-foreground mb-2">
               Ваш контакт успешно отправлен
             </h2>
           </div>
           
           <Button 
             onClick={resetToRecording}
-            className="bg-secondary hover:bg-secondary/80 text-secondary-foreground neon-glow text-secondary"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
           >
             Создать новый лид
           </Button>
@@ -127,36 +147,36 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen bg-black text-foreground">
-      <div className="container mx-auto p-4 h-screen flex flex-col lg:flex-row gap-4">
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto p-6 h-screen flex flex-col lg:flex-row gap-8 max-w-6xl">
         
-        {/* Левая колонка - Изображение */}
+        {/* Левая колонка - QR код */}
         <div className="flex-1 flex items-center justify-center">
-          <Card className="bg-card border-border p-6 w-full max-w-md">
+          <Card className="bg-card border-border p-8 w-full max-w-md minimal-shadow">
             <div 
-              className="aspect-square bg-muted rounded-lg overflow-hidden cursor-pointer hover:scale-105 transition-transform duration-300"
+              className="qr-container aspect-square cursor-pointer hover:scale-105 transition-transform duration-200"
               onClick={() => setShowImageModal(true)}
             >
               <img 
-                src="/img/2b9cf8b4-26b6-4c50-9d90-810127394611.jpg"
-                alt="Продукт"
-                className="w-full h-full object-cover"
+                src="https://cdn.poehali.dev/files/caf148b2-42ee-493a-9b6e-7ea78d766f46.jpeg"
+                alt="QR код для связи"
+                className="w-full h-full object-contain"
               />
             </div>
-            <p className="text-center mt-4 text-muted-foreground">
+            <p className="text-center mt-4 text-muted-foreground text-sm">
               Нажмите для увеличения
             </p>
           </Card>
         </div>
 
         {/* Правая колонка - Видео запись */}
-        <div className="flex-1 flex flex-col gap-4">
-          <Card className="bg-card border-border p-6 flex-1">
-            <h2 className="text-2xl font-bold mb-6 text-center neon-text text-primary">
-              ВИДЕО РЕКОРДЕР
-            </h2>
+        <div className="flex-1 flex flex-col">
+          <Card className="bg-card border-border p-8 flex-1 minimal-shadow">
+            <h1 className="text-3xl font-light text-center mb-8 text-foreground">
+              Видео запись
+            </h1>
             
-            <div className="video-container mb-6 bg-black rounded-lg overflow-hidden">
+            <div className="video-container mb-6 bg-muted/20 rounded-lg overflow-hidden">
               {recordedVideoUrl ? (
                 <video
                   src={recordedVideoUrl}
@@ -164,26 +184,36 @@ const Index = () => {
                   className="w-full h-64 object-cover"
                 />
               ) : (
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="w-full h-64 object-cover"
-                />
+                <div className="w-full h-64 flex items-center justify-center bg-muted/10">
+                  {cameraStarted ? (
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      muted
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-center text-muted-foreground">
+                      <Icon name="Video" size={48} className="mx-auto mb-3 opacity-50" />
+                      <p className="text-sm">Нажмите кнопку для начала записи</p>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
             <div className="space-y-4">
               {!videoBlob ? (
-                <div className="flex gap-4 justify-center">
+                <div className="flex justify-center">
                   <Button
                     onClick={isRecording ? stopRecording : startRecording}
+                    size="lg"
                     className={`${
                       isRecording 
-                        ? 'bg-destructive hover:bg-destructive/80 text-destructive-foreground' 
-                        : 'bg-primary hover:bg-primary/80 text-primary-foreground neon-glow'
-                    } text-primary`}
+                        ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground' 
+                        : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+                    } px-8`}
                   >
                     <Icon name={isRecording ? "Square" : "Circle"} className="mr-2" size={20} />
                     {isRecording ? 'Остановить запись' : 'Начать запись'}
@@ -193,7 +223,8 @@ const Index = () => {
                 <div className="space-y-3">
                   <Button
                     onClick={sendToTelegram}
-                    className="w-full bg-secondary hover:bg-secondary/80 text-secondary-foreground neon-glow text-secondary"
+                    size="lg"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                   >
                     <Icon name="Send" className="mr-2" size={20} />
                     Отправить в Telegram
@@ -202,7 +233,8 @@ const Index = () => {
                   <Button
                     onClick={resetToRecording}
                     variant="outline"
-                    className="w-full border-border text-muted-foreground hover:text-foreground"
+                    size="lg"
+                    className="w-full border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   >
                     <Icon name="RotateCcw" className="mr-2" size={20} />
                     Записать заново
@@ -211,20 +243,15 @@ const Index = () => {
               )}
             </div>
 
-            <div className="mt-6 p-4 bg-muted/20 rounded-lg">
-              <h3 className="font-semibold mb-2 text-sm text-muted-foreground">НАСТРОЙКИ ЗАПИСИ</h3>
-              <div className="text-xs text-muted-foreground space-y-1">
-                <div className="flex justify-between">
-                  <span>Качество:</span>
-                  <span className="text-primary">480p HD</span>
+            <div className="mt-8 p-4 bg-muted/30 rounded-lg">
+              <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
+                <div className="text-center">
+                  <div className="font-medium text-foreground mb-1">Качество</div>
+                  <div>480p HD</div>
                 </div>
-                <div className="flex justify-between">
-                  <span>Камера:</span>
-                  <span className="text-primary">Тыловая</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Телеграм:</span>
-                  <span className="text-secondary">Готов к отправке</span>
+                <div className="text-center">
+                  <div className="font-medium text-foreground mb-1">Камера</div>
+                  <div>Тыловая</div>
                 </div>
               </div>
             </div>
@@ -232,27 +259,31 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Модальное окно для увеличенного изображения */}
+      {/* Модальное окно для увеличенного QR */}
       <Dialog open={showImageModal} onOpenChange={setShowImageModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] bg-black/95 border-border">
-          <div className="relative">
+        <DialogContent className="max-w-2xl bg-background border-border">
+          <div className="qr-container">
             <img 
-              src="/img/2b9cf8b4-26b6-4c50-9d90-810127394611.jpg"
-              alt="Увеличенное изображение"
-              className="w-full h-auto max-h-[80vh] object-contain rounded-lg"
+              src="https://cdn.poehali.dev/files/caf148b2-42ee-493a-9b6e-7ea78d766f46.jpeg"
+              alt="QR код для связи"
+              className="w-full h-auto object-contain"
             />
-            <Button
-              onClick={() => setShowImageModal(false)}
-              className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white border-none neon-glow text-primary"
-              size="sm"
-            >
-              <Icon name="X" size={20} />
-            </Button>
           </div>
         </DialogContent>
       </Dialog>
     </div>
   );
 };
+
+// Расширяем интерфейс Window для Telegram WebApp API
+declare global {
+  interface Window {
+    Telegram: {
+      WebApp: {
+        showPopup: (params: any, callback: (buttonId: string) => void) => void;
+      };
+    };
+  }
+}
 
 export default Index;
